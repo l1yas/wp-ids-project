@@ -16,7 +16,7 @@ L’installation et l’utilisation de Docker ont rencontré plusieurs problème
 
 Le lab WordPress a ensuite été lancé avec Docker Compose. Le conteneur WordPress et le conteneur MySQL ont été démarrés sur `localhost:8080`. Une fois l’interface accessible, WordPress a été configuré manuellement. Un compte admin volontairement faible a été créé avec `admin:admin`, et un compte utilisateur simple avec `user:user123`, afin de préparer plus tard des tests de sécurité et de brute force dans un environnement contrôlé. Le site a été personnalisé, notamment avec l’ajout d’une image de chat sur une page de blog, ce qui a servi de test de modification de contenu. Des tests ont ensuite été réalisés avec Burp Suite, qui ont montré des différences intéressantes entre les réponses HTTP en cas de mauvais identifiants et en cas de connexion réussie. Enfin, le plugin WP Activity Log a été installé pour ajouter de la visibilité sur les actions et les connexions.
 
-## 5. Relier GitHub à mon terminal Linux
+## 5. Relier GitHub à mon terminal Linux
 
 Le terminal Linux a été relié à GitHub via une clé SSH. Une clé a été générée, ajoutée au compte GitHub, puis testée avec `ssh -T git@github.com`. La connexion a été confirmée avec succès, ce qui a permis de pousser le projet sans passer par un mot de passe à chaque fois. Ensuite, le dépôt local a été initialisé avec Git, le remote GitHub a été ajouté, puis la branche principale a été synchronisée avec le dépôt distant malgré la présence d’un README déjà existant sur GitHub. Après résolution du conflit d’historiques, le projet local a pu être poussé correctement vers la repo.
 
