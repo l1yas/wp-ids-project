@@ -1,129 +1,161 @@
-# 25 avril
+## 28/04 - Bilan technique de `detection.py` (IDS WordPress Docker)
+
+### 1. Rôle général du script
+
+Le script `detection.py` est un système de détection d’intrusions (IDS) basique conçu pour analyser en temps réel les logs HTTP générés par un conteneur WordPress exécuté sous Docker. Son objectif est d’identifier des comportements potentiellement malveillants à partir de patterns connus d’attaques web.
 
 
 
-## 1. Mise en place de l’environnement Docker
+### 2. Source des données
 
-Le projet a commencé avec la création d’un environnement WordPress basé sur Docker Compose, comprenant :
+Le script s’appuie sur un flux en temps réel des logs du conteneur Docker WordPress :
 
-* un service MySQL (base de données)
-* un service WordPress Apache
-* un conteneur WP-CLI pour l’automatisation
+* Source : `docker logs -f wordpress-wordpress-1`
+* Type de données : logs Apache HTTP (format access log)
+* Contenu typique :
 
-Les premiers problèmes rencontrés concernaient :
+  * Adresse IP source
+  * Timestamp
+  * Requête HTTP (méthode, URL, paramètres)
+  * Code de réponse
+  * User-Agent
 
-* des conflits de conteneurs déjà existants (ports 8080 déjà utilisés)
-* des erreurs de nommage de conteneurs Docker
-* des incohérences entre images MySQL utilisées (mysql:5.7 vs mysql:8.0)
-
-
-
-## 2. Problèmes liés à la base de données
-
-Plusieurs erreurs ont bloqué l’initialisation :
-
-* impossibilité de connexion entre WordPress et MySQL
-* erreurs “Error establishing a database connection”
-* délais d’attente insuffisants lors du démarrage de la base
-* conteneur MySQL parfois non prêt au moment des requêtes WP-CLI
-
-Des solutions partielles ont été mises en place :
-
-* ajout de boucles d’attente (mysqladmin ping)
-* redémarrages via docker compose down/up
-* nettoyage des volumes Docker pour repartir d’un état propre
+Le flux est consommé ligne par ligne via un subprocess Python.
 
 
 
-## 3. Problèmes WP-CLI
+### 3. Fonctionnement du pipeline
 
-WP-CLI a présenté plusieurs blocages :
+#### a. Lecture des logs
 
-* commande `wp` introuvable dans certains contextes
-* absence de WordPress installé dans `/var/www/html`
-* erreurs lors de `core download` (manque de mémoire PHP)
-* erreurs de permissions sur le volume `/var/www/html`
-* impossibilité d’exécuter certaines commandes sans installation initiale WordPress
+Le script ouvre un processus Docker et lit les logs en streaming continu. Chaque ligne représente une requête HTTP traitée par WordPress/Apache.
 
-Conclusion fonctionnelle :
-WP-CLI ne peut pas être utilisé tant que WordPress n’est pas initialisé correctement.
+#### b. Extraction implicite
 
+Aucune structuration avancée n’est appliquée. La ligne brute est directement utilisée pour l’analyse.
 
+#### c. Moteur de détection
 
-## 4. Initialisation WordPress (install.php)
+Le cœur du système repose sur un dictionnaire de signatures regex :
 
-Un blocage important a été identifié :
+* SQL Injection :
 
-* WordPress nécessite une installation initiale via `wp-admin/install.php`
-* sélection de langue obligatoire
-* création manuelle de l’administrateur nécessaire
+  * détection de caractères d’échappement (`'`, `--`, `#`)
+  * patterns de type `union select`
+  * conditions classiques `or 1=1`
+  * fonctions suspectes comme `sleep()`
 
-Cela a empêché une automatisation complète immédiate du setup.
+* Local File Inclusion :
 
-Conclusion :
-Une étape humaine minimale reste nécessaire pour finaliser l’installation initiale WordPress dans ce setup.
+  * traversal de répertoires (`../`)
+  * accès à fichiers sensibles (`/etc/passwd`, `wp-config.php`)
 
+* Cross-Site Scripting :
 
+  * balises `<script>`
+  * schémas `javascript:`
+  * événements HTML (`onerror=`)
 
-## 5. Seed de la base de données
-
-Un script de seed a été introduit pour automatiser la création d’utilisateurs.
-
-Problèmes rencontrés :
-
-* tables WordPress inexistantes avant installation (`wp_users` absent)
-* erreurs SQL lors de l’injection des utilisateurs
-* nécessité d’attendre la création complète du schéma WordPress
-
-Une fois la base correctement initialisée, le seed fonctionne correctement et permet :
-
-* création d’utilisateurs supplémentaires
-* insertion de données de test
+Chaque ligne est testée contre ces expressions régulières.
 
 
 
-## 6. Problèmes Git et gestion du repository
+### 4. Logique de décision
 
-Un problème majeur a été identifié dans la gestion du dépôt Git :
+* Si une correspondance regex est trouvée :
 
-* présence initiale d’un fichier `backup.sql` dans le repository
-* mauvaise pratique (fichier de base de données versionné)
-* nécessité de nettoyage de l’historique Git
+  * un type d’attaque est assigné (SQLi, LFI, XSS)
+  * une alerte est générée immédiatement
 
-Actions effectuées :
+* Si aucune correspondance :
 
-* tentative de suppression simple (rm + commit) insuffisante
-* utilisation de `git filter-repo` pour réécriture complète de l’historique
-* résolution des erreurs liées aux clones non propres
-* correction des problèmes de remote GitHub supprimé par filter-repo
-* utilisation de force push pour synchroniser GitHub
+  * la ligne est ignorée
 
-Résultat :
-Repository nettoyé avec suppression complète du fichier `backup.sql` dans l’historique.
+Le système fonctionne donc en classification binaire simple : match ou non-match.
 
 
 
-## 7. Stabilisation finale
+### 5. Système d’alerting
 
-Après plusieurs itérations :
+Lorsqu’une détection est effectuée :
 
-* Docker fonctionne de manière stable après nettoyage des volumes
-* WordPress démarre correctement
-* la base de données est accessible
-* le seed fonctionne une fois WordPress initialisé
-* le repository GitHub est propre et synchronisé
+* Un message est affiché en console
+* L’événement est écrit dans un fichier `alerts.log`
 
+Le format inclut :
 
-
-## 8. Conclusion générale
-
-Les difficultés principales ont été :
-
-* synchronisation entre WordPress et MySQL au démarrage
-* contrainte d’installation initiale WordPress empêchant l’automatisation complète
-* gestion incorrecte initiale des données dans Git (backup.sql versionné)
-* compréhension du cycle complet Docker + WordPress + WP-CLI
-
-Le système est maintenant fonctionnel, reproductible via Docker, et le repository a été nettoyé pour correspondre à de bonnes pratiques (absence de dumps SQL, utilisation de scripts d’initialisation et seed).
+* type d’attaque détecté
+* ligne brute du log
 
 
+
+### 6. Limites actuelles
+
+#### a. Absence de parsing structuré
+
+Le script analyse la ligne brute sans extraction formelle des champs (IP, URL, méthode, etc.), ce qui limite la précision.
+
+#### b. Détection uniquement par signature
+
+Le moteur repose exclusivement sur des regex statiques, sans analyse comportementale.
+
+#### c. Aucun système de corrélation
+
+Il n’y a pas de notion :
+
+* de fréquence par IP
+* de répétition d’attaque
+* de séquence d’événements
+
+#### d. Faux positifs possibles
+
+Certaines regex (ex : `'` ou `--`) peuvent déclencher sur du trafic normal.
+
+#### e. Absence de scoring
+
+Toutes les alertes ont le même niveau de gravité.
+
+
+
+### 7. Forces du prototype
+
+* Fonctionne en temps réel
+* Simple à comprendre et à étendre
+* Facilement modifiable (ajout de patterns)
+* Compatible environnement Docker
+* Bonne base pédagogique pour IDS signature-based
+
+
+
+### 8. Positionnement du projet
+
+Ce script correspond à un IDS de niveau débutant à intermédiaire basé sur signatures. Il se rapproche conceptuellement de :
+
+* un mini moteur Suricata simplifié
+* un logger de sécurité applicatif
+* une base de SOC prototype
+
+
+
+### 9. Évolutivité naturelle
+
+Le design permet plusieurs améliorations structurantes :
+
+* parsing avancé des logs Apache
+* système de scoring par sévérité
+* détection comportementale (rate-based detection)
+* corrélation multi-requêtes par IP
+* export JSON pour SIEM externe
+* interface de visualisation (dashboard)
+
+
+
+### 10. Conclusion
+
+Le script `detection.py` constitue un prototype fonctionnel d’IDS basé sur l’analyse de logs WordPress en environnement Docker. Il démontre la capacité à :
+
+* consommer un flux de logs en temps réel
+* appliquer des règles de détection par signatures
+* générer des alertes simples
+
+Cependant, il reste limité à une logique statique et non contextuelle, ce qui en fait une base pédagogique solide mais non adaptée à un environnement de production ou à une détection avancée de menaces.
