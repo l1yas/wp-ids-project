@@ -6,6 +6,13 @@ import subprocess
 log_file= "access.log"
 alert_file = "alerts.log"
 
+rouge="\033[91m"
+vert="\033[92m"
+jaune="\033[93m"
+bleu="\033[96m"
+reset="\033[0m"
+bold="\033[1m"
+
 patterns = {
     "SQLi": [
         r"(?i)(\%27)|(\')|(\-\-)|(\%23)|(#)",
@@ -56,7 +63,7 @@ def run():
     for line in docker_logs():
         attack = detection(line)
         if attack:
-            alert = f"[Alert] {attack} in {line.strip()}"
+            alert = f"{bold}{vert}[Alerte]{jaune} {attack}{reset} in {bold}{line.strip()}{reset}"
             print(alert)
             log_alert(alert)
 
