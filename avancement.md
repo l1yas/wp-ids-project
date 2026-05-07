@@ -1,54 +1,160 @@
-## Bilan du projet IDS WordPress — 04/05/2026
+# Bilan du projet IDS WordPress — 07/05/2026
 
-### 1. État actuel du système
+## 1. Mise à jour de `seed.sh`
 
-Le projet IDS repose sur une architecture simple mais fonctionnelle permettant l’analyse en temps réel des logs WordPress exécutés dans un environnement Docker. Le système détecte actuellement des attaques basées sur des signatures et commence à intégrer des comportements anormaux.
+### Changements effectués
 
-### 2. Évolution de detection.py
-Objectif de l'évolution :
+Ajout de l’installation automatique du plugin WordPress **Simple History** via WP-CLI dans le container WordPress.
 
-Structurer les alertes de sécurité en sortie exploitable pour analyse et extension future.
+### Fonctionnalités ajoutées
 
-Changements effectués :
-- Ajout d’un output JSON structuré (NDJSON) pour chaque événement détecté
-- Conservation du logging console pour debug humain
-Enrichissement des événements avec des champs exploitables :
-- IP source
-- type d’attaque
-- timestamp (si extrait)
-- log brut
-- Résultat
+* attente du container WordPress
+* vérification du fonctionnement de WP-CLI
+* installation automatique du plugin `simple-history`
+* activation automatique du plugin
+* comportement idempotent :
 
-Le système produit désormais deux flux :
+  * le script peut être relancé sans casser l’environnement
+  * gestion des plugins déjà installés/activés
 
-Logs texte (lecture humaine)
-Logs JSON (analyse machine / futur SIEM)
+### Résultat
+
+Le lab peut maintenant être entièrement préparé avec :
+
+```bash id="cmd1"
+docker compose up -d
+./seed.sh
+```
+
+## 2. Ajustements de `bruteforce.py` (WIP)
+
+## Nouvelle logique implémentée
+
+Le module a été transformé en moteur de détection basé sur les événements d’authentification.
+
+### Nouveaux comportements
+
+Suivi des :
+
+* failed logins par IP
+* failed logins par username
+
+### Structures utilisées
+
+Utilisation de :
+
+```python id="code1"
+defaultdict(deque)
+```
+
+afin d’implémenter une sliding window efficace.
+
+### Détections ajoutées
+
+#### Bruteforce IP
+
+Détection :
+
+* d’un grand nombre d’échecs
+* provenant de la même IP
+
+#### Password spraying
+
+Détection :
+
+* d’un username ciblé plusieurs fois
+* dans une fenêtre temporelle donnée
+
+## 3. Liaison du parser avec `bruteforce.py` et amélioration de `detection.py` (WIP)
+
+## Mise en relation des composants
+
+Le parser WordPress produit désormais des événements structurés sous forme de dictionnaires Python.
+
+Exemple :
+
+```python id="code2"
+{
+    "type": "failed_login",
+    "username": "test",
+    "ip": None,
+    "raw": "..."
+}
+```
+
+Ces événements sont ensuite transmis à :
+
+* `bruteforce.py`
+* `detect_bruteforce()`
 
 
-### 3. Ajout de bruteforce.py
-Objectif
 
-Introduire une détection comportementale basée sur le temps, en complément des signatures statiques.
+## Ajustements de `detection.py`
 
-Logique implémentée
-- Suivi des requêtes par IP dans une fenêtre temporelle
-Détection basée sur :
-- fréquence de requêtes
-- seuil défini sur une période courte
-Limites actuelles
-- Détection trop permissive sans données de statut HTTP ou login success/failure
-- Impossible de distinguer avec certitude échec ou succès d’authentification
-- Déclenchements parfois précoces selon le trafic de fond du container
+Le rôle de `detection.py` a commencé à évoluer vers :
 
-### 4. Prochains objectifs
+* orchestrateur central
+* pipeline de traitement
+* gestionnaire d’alertes
 
-Enrichir l’environnement WordPress afin d’améliorer la précision du module bruteforce.
-Mise à jour de seed.sh
-- Ajouter des plugins WordPress permettant :
-    - la journalisation des événements d’authentification
-    - la visibilité des failed logins
-    - l’enrichissement des logs exploitables par l’IDS
-Avec les plugins :
-- détection de failed login réelle
-- identification des usernames ciblés
-- réduction des faux positifs
+### Sortie enrichie
+
+Les alertes affichent désormais :
+
+* type d’attaque
+* username ciblé
+* score
+* données brutes associées
+
+Le système commence donc à produire des logs beaucoup plus détaillés et exploitables.
+
+
+
+# 4. Création du premier parser WordPress (WIP)
+
+### Fichier créé
+
+```text id="file1"
+parsers/wp_simple_history.py
+```
+
+
+
+## Fonction du parser
+
+Le parser :
+
+* récupère les événements via WP-CLI
+* lit les logs générés par Simple History
+* extrait les failed logins
+* transforme les données en événements structurés
+
+### Technologies utilisées
+
+* `subprocess`
+* `regex`
+* parsing ligne par ligne
+
+
+
+## Fonctionnalités implémentées
+
+### Extraction :
+
+* username
+* type d’événement
+* logs bruts
+
+### Génération d’events Python
+
+Exemple :
+
+```python id="code3"
+{
+    "type": "failed_login",
+    "username": "admin",
+    "ip": None,
+    "raw": "..."
+}
+```
+
