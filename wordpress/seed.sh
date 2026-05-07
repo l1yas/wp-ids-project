@@ -1,12 +1,12 @@
 #!/bin/bash
 
-echo "waiting for MySQL..."
+echo "[+] Waiting for MySQL..."
 
 until docker compose exec db mysqladmin ping -h "localhost" --silent; do
   sleep 2
 done
 
-echo "inserting users..."
+echo "[+] Inserting users..."
 
 docker compose exec -T db mysql -u wpuser -pwppass wordpress <<EOF
 
@@ -23,4 +23,14 @@ ON DUPLICATE KEY UPDATE meta_value=meta_value;
 
 EOF
 
-echo "done"
+echo "[+] Waiting for Wordpress container..."
+
+until docker compose exec wordpress wp --info --allow-root >/dev/null 2>&1; do
+  sleep 2
+done
+
+echo "[+] Installing Simple History plugin..."
+
+docker compose exec wordpress wp plugin install simple-history --activate --allow-root || true
+
+echo "[+] Done"
