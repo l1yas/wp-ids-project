@@ -1,160 +1,153 @@
-# Bilan du projet IDS WordPress — 07/05/2026
+# Résumé de l’avancement  21/05/2026 — IDS WordPress
 
-## 1. Mise à jour de `seed.sh`
+## Mise en place et debugging du parser WordPress
 
-### Changements effectués
+Travail effectué sur :
 
-Ajout de l’installation automatique du plugin WordPress **Simple History** via WP-CLI dans le container WordPress.
-
-### Fonctionnalités ajoutées
-
-* attente du container WordPress
-* vérification du fonctionnement de WP-CLI
-* installation automatique du plugin `simple-history`
-* activation automatique du plugin
-* comportement idempotent :
-
-  * le script peut être relancé sans casser l’environnement
-  * gestion des plugins déjà installés/activés
-
-### Résultat
-
-Le lab peut maintenant être entièrement préparé avec :
-
-```bash id="cmd1"
-docker compose up -d
-./seed.sh
-```
-
-## 2. Ajustements de `bruteforce.py` (WIP)
-
-## Nouvelle logique implémentée
-
-Le module a été transformé en moteur de détection basé sur les événements d’authentification.
-
-### Nouveaux comportements
-
-Suivi des :
-
-* failed logins par IP
-* failed logins par username
-
-### Structures utilisées
-
-Utilisation de :
-
-```python id="code1"
-defaultdict(deque)
-```
-
-afin d’implémenter une sliding window efficace.
-
-### Détections ajoutées
-
-#### Bruteforce IP
-
-Détection :
-
-* d’un grand nombre d’échecs
-* provenant de la même IP
-
-#### Password spraying
-
-Détection :
-
-* d’un username ciblé plusieurs fois
-* dans une fenêtre temporelle donnée
-
-## 3. Liaison du parser avec `bruteforce.py` et amélioration de `detection.py` (WIP)
-
-## Mise en relation des composants
-
-Le parser WordPress produit désormais des événements structurés sous forme de dictionnaires Python.
-
-Exemple :
-
-```python id="code2"
-{
-    "type": "failed_login",
-    "username": "test",
-    "ip": None,
-    "raw": "..."
-}
-```
-
-Ces événements sont ensuite transmis à :
-
-* `bruteforce.py`
-* `detect_bruteforce()`
-
-
-
-## Ajustements de `detection.py`
-
-Le rôle de `detection.py` a commencé à évoluer vers :
-
-* orchestrateur central
-* pipeline de traitement
-* gestionnaire d’alertes
-
-### Sortie enrichie
-
-Les alertes affichent désormais :
-
-* type d’attaque
-* username ciblé
-* score
-* données brutes associées
-
-Le système commence donc à produire des logs beaucoup plus détaillés et exploitables.
-
-
-
-# 4. Création du premier parser WordPress (WIP)
-
-### Fichier créé
-
-```text id="file1"
+```text id="f1"
 parsers/wp_simple_history.py
 ```
 
 
 
-## Fonction du parser
+# Objectif du parser
 
-Le parser :
+Le parser a été conçu pour :
 
-* récupère les événements via WP-CLI
-* lit les logs générés par Simple History
-* extrait les failed logins
-* transforme les données en événements structurés
-
-### Technologies utilisées
-
-* `subprocess`
-* `regex`
-* parsing ligne par ligne
+* récupérer les logs WordPress via WP-CLI
+* parser les événements du plugin Simple History
+* détecter les tentatives de connexion échouées
+* transformer les logs en événements Python structurés
 
 
 
-## Fonctionnalités implémentées
+# Intégration Docker + WP-CLI
 
-### Extraction :
+## Problème rencontré
 
-* username
-* type d’événement
-* logs bruts
+Le parser utilisait initialement :
 
-### Génération d’events Python
+```python id="c1"
+["wp", "simple-history", "list", "--allow-root"]
+```
 
-Exemple :
+Ce qui provoquait :
 
-```python id="code3"
+```text id="c2"
+FileNotFoundError: No such file or directory: 'wp'
+```
+
+
+
+## Cause identifiée
+
+WP-CLI était disponible uniquement dans le container Docker WordPress et non sur l’hôte Kali.
+
+
+
+## Correction appliquée
+
+Migration vers :
+
+```python id="c3"
+["docker", "exec", "wordpress-wordpress-1",
+ "wp", "simple-history", "list", "--allow-root"]
+```
+
+# Parsing des événements
+
+## Première approche
+
+Utilisation d’un filtrage simple :
+
+```python id="c6"
+if "Failed to login" in line:
+```
+
+
+
+## Regex initiale incorrecte
+
+Regex problématique :
+
+```python id="c7"
+r'user name "([^"]+)"'
+```
+
+Puis :
+
+```python id="c8"
+r'username "(^"]+)"'
+```
+
+
+
+## Correction finale
+
+Regex fonctionnelle :
+
+```python id="c9"
+r'username "([^"]+)"'
+```
+
+
+
+# Structuration du parsing
+
+Ajout d’une fonction dédiée :
+
+```python id="c10"
+parse_line()
+```
+
+
+
+## Fonction du parser structuré
+
+Découpage des colonnes WP-CLI via :
+
+```python id="c11"
+line.split("\t")
+```
+
+Extraction des champs :
+
+* ID
+* date
+* initiator
+* description
+* level
+* raw log
+
+
+
+# Génération d’événements structurés
+
+Le parser produit désormais :
+
+```python id="c12"
 {
     "type": "failed_login",
     "username": "admin",
-    "ip": None,
+    "date": "2026-05-21 17:11:06",
+    "level": "warning",
     "raw": "..."
 }
 ```
 
+
+
+# Mise en place du mode debug
+
+Ajout d’un mode debug affichant :
+
+* les logs bruts WP-CLI
+* les événements générés
+
+via :
+
+```python id="c13"
+debug()
+```
+
+et commence à dépasser le simple script de parsing de logs.
