@@ -4,7 +4,8 @@ import time
 from collections import defaultdict
 import subprocess
 import json
-from bruteforce import detect_bruteforce
+from bruteforce import failed_logins, detect_bruteforce
+import threading
 
 # files
 log_file= "access.log"
@@ -41,14 +42,7 @@ patterns = {
 
 #functions
 
-def extract_url(line):
-    try :
-        return line.split('"')[1].split(" ")[1]
-    except:
-        return ""
 
-def extract_ip(line):
-    return line.split(" ")[0]
 
 def detection(line):
     for attack_type, PATTERNS in patterns.items():
@@ -72,52 +66,103 @@ def docker_logs():
 
     for line in process.stdout:
         yield line
-def extract_ip(line):
-	return line.split(" ")[0]
 
-def extract_timestamp(line):
-	return line.split("[")[1].split("]")[0]
+def is_failed_login(line):
+    return "Failed to login" in line
+            
+
 
 def json_logs(data):
     with open(json_output, "a") as f:
     	f.write(json.dumps(data) + "\n")
 
+# -- Extractions
 
-def run():
-    print("Script IDS démarré")
+def extract_url(line):
+    try :
+        return line.split('"')[1].split(" ")[1]
+    except:
+        return ""
 
+def extract_ip(line):
+    return line.split(" ")[0]
+
+def extract_timestamp(line):
+	return line.split("[")[1].split("]")[0]
+
+def extract_username(line):
+	match = re.search(r'username "([^"]+)"', line)
+	return match.group(1) if match else None
+
+# -- Threads 
+
+def web_loop():
     for line in docker_logs():
-        ip= extract_ip(line)        
+
+        ip = extract_ip(line)
         url = extract_url(line)
         attack = detection(line)
-        brute= detect_bruteforce(ip,url)
 
-        if brute:
-            alert_text = f"{bold}{rouge}[Alert] {vert}BRUTEFORCE{reset} from {bold}{ip}{reset}"
-            print(alert_text)
-            log_alert(alert_text)
-            alert_json = {
-                "ip": ip,
-                "attack": "BRUTEFORCE",
-                "url": url,
-                "log": line.strip()
-            }
-            json_logs(alert_json)
-            continue
         if attack:
-            alert_text = f"{bold}{jaune}[Alert] {vert}{attack}{reset} in {bold}{line.strip()}{reset}"
+            alert_text = f"{bold}{jaune}[Alert]{reset} {attack} from {ip}"
             print(alert_text)
+
             log_alert(alert_text)
 
-            alert_json = {
+            json_logs({
                 "ip": ip,
                 "attack": attack,
                 "url": url,
                 "log": line.strip()
-            }
+            })
 
-            json_logs(alert_json)
+def auth_loop():
+    seen = set()
 
- 
+    while True:
+
+        process = subprocess.Popen(
+            [
+                "docker", "exec", "wordpress-wordpress-1",
+                "wp", "simple-history", "list", "--allow-root"
+            ],
+            stdout=subprocess.PIPE,
+            text=True
+        )
+
+        for line in process.stdout:
+
+            if "Failed to login" not in line:
+                continue
+
+            username = extract_username(line)
+
+            if not username:
+                continue
+
+            if line in seen:
+                continue
+
+            seen.add(line)
+
+            failed_logins("unknown", username)
+
+            brute = detect_bruteforce("unknown", username)
+
+            if brute:
+                print(f"{bold}{rouge}[ALERT]{reset} BRUTEFORCE user={username}")
+
+        time.sleep(5)
+
 if __name__ == "__main__":
-    run()
+
+    print("Script IDS démarré")
+
+    t1 = threading.Thread(target=web_loop, daemon=True)
+    t2 = threading.Thread(target=auth_loop, daemon=True)
+
+    t1.start()
+    t2.start()
+
+    t1.join()
+    t2.join()
