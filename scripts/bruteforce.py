@@ -15,7 +15,7 @@ def failed_logins(ip, username):
         failed_by_ip[ip].popleft()
     failed_by_user[username].append(now)
 
-    while failed_by_user[username].append(now) and now - failed_by_user[username][0] > window:
+    while failed_by_user[username] and now - failed_by_user[username][0] > window:
         failed_by_user[username].popleft()
 
 def detect_bruteforce(ip, username):
@@ -34,4 +34,4 @@ def detect_bruteforce(ip, username):
             "username": username,
             "score": user_hits
         }
-    return None          
+    return None
