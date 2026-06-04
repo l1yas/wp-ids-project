@@ -1,153 +1,277 @@
-# Résumé de l’avancement  21/05/2026 — IDS WordPress
+# Résumé de l’avancement — 03/06/2026 — IDS WordPress
 
-## Mise en place et debugging du parser WordPress
+# Ajout d'un moteur d'authentification dédié
 
-Travail effectué sur :
+Création d'un pipeline séparé :
 
-```text id="f1"
-parsers/wp_simple_history.py
+```python
+auth_loop()
+```
+
+Objectif :
+
+* surveiller les événements WordPress
+* détecter les connexions échouées
+* alimenter le moteur de brute force
+
+
+
+## Source des événements
+
+Utilisation de WP-CLI :
+
+```bash
+docker exec wordpress-wordpress-1 \
+wp simple-history list --allow-root
+```
+
+Le plugin Simple History fournit :
+
+```text
+Failed to login with username "admin"
 ```
 
 
 
-# Objectif du parser
+## Extraction des utilisateurs
 
-Le parser a été conçu pour :
+Création d'un parser dédié :
 
-* récupérer les logs WordPress via WP-CLI
-* parser les événements du plugin Simple History
-* détecter les tentatives de connexion échouées
-* transformer les logs en événements Python structurés
-
-
-
-# Intégration Docker + WP-CLI
-
-## Problème rencontré
-
-Le parser utilisait initialement :
-
-```python id="c1"
-["wp", "simple-history", "list", "--allow-root"]
+```python
+extract_username()
 ```
 
-Ce qui provoquait :
+Regex utilisée :
 
-```text id="c2"
-FileNotFoundError: No such file or directory: 'wp'
-```
-
-
-
-## Cause identifiée
-
-WP-CLI était disponible uniquement dans le container Docker WordPress et non sur l’hôte Kali.
-
-
-
-## Correction appliquée
-
-Migration vers :
-
-```python id="c3"
-["docker", "exec", "wordpress-wordpress-1",
- "wp", "simple-history", "list", "--allow-root"]
-```
-
-# Parsing des événements
-
-## Première approche
-
-Utilisation d’un filtrage simple :
-
-```python id="c6"
-if "Failed to login" in line:
-```
-
-
-
-## Regex initiale incorrecte
-
-Regex problématique :
-
-```python id="c7"
-r'user name "([^"]+)"'
-```
-
-Puis :
-
-```python id="c8"
-r'username "(^"]+)"'
-```
-
-
-
-## Correction finale
-
-Regex fonctionnelle :
-
-```python id="c9"
+```python
 r'username "([^"]+)"'
 ```
 
+Exemple :
 
+```text
+Failed to login with username "admin"
+```
 
-# Structuration du parsing
+↓
 
-Ajout d’une fonction dédiée :
-
-```python id="c10"
-parse_line()
+```python
+admin
 ```
 
 
 
-## Fonction du parser structuré
+# Gestion des doublons
 
-Découpage des colonnes WP-CLI via :
+Problème rencontré :
 
-```python id="c11"
-line.split("\t")
+```text
+wp simple-history list
 ```
 
-Extraction des champs :
+renvoie l'historique complet à chaque exécution.
 
-* ID
-* date
-* initiator
-* description
-* level
-* raw log
+Conséquence :
+
+* retraitement permanent des mêmes événements
+* faux positifs possibles
 
 
 
-# Génération d’événements structurés
+## Solution
 
-Le parser produit désormais :
+Ajout d'un cache mémoire :
 
-```python id="c12"
-{
-    "type": "failed_login",
-    "username": "admin",
-    "date": "2026-05-21 17:11:06",
-    "level": "warning",
-    "raw": "..."
-}
+```python
+seen = set()
+```
+
+Chaque événement déjà traité est ignoré :
+
+```python
+if key in seen:
+    continue
 ```
 
 
 
-# Mise en place du mode debug
+# Passage à une architecture multi-thread
 
-Ajout d’un mode debug affichant :
+Introduction du module :
 
-* les logs bruts WP-CLI
-* les événements générés
-
-via :
-
-```python id="c13"
-debug()
+```python
+import threading
 ```
 
-et commence à dépasser le simple script de parsing de logs.
+
+
+## Thread Web
+
+Création :
+
+```python
+web_loop()
+```
+
+Responsabilités :
+
+* lecture des logs Docker
+* détection SQLi
+* détection LFI
+* détection XSS
+* génération des alertes
+
+
+
+## Thread Auth
+
+Création :
+
+```python
+auth_loop()
+```
+
+Responsabilités :
+
+* interrogation de WP-CLI
+* extraction des utilisateurs
+* comptage des échecs
+* détection brute force
+
+
+
+## Lancement parallèle
+
+Mise en place :
+
+```python
+t1 = threading.Thread(target=web_loop, daemon=True)
+t2 = threading.Thread(target=auth_loop, daemon=True)
+```
+
+Démarrage :
+
+```python
+t1.start()
+t2.start()
+```
+
+Le système surveille désormais simultanément :
+
+```text
+Logs HTTP
++
+Logs WordPress
+```
+
+
+
+# Débogage et corrections majeures
+
+## Correction d'une boucle infinie coûteuse
+
+Erreur d'indentation détectée :
+
+```python
+while True:
+    process = subprocess.Popen(...)
+```
+
+sans traitement associé.
+
+Conséquence :
+
+```text
+Création massive de processus Docker
+CPU à 100 %
+Système fortement ralenti
+```
+
+Correction :
+
+* réintégration correcte du parsing dans la boucle
+* ajout du délai :
+
+```python
+time.sleep(5)
+```
+
+
+
+## Correction des erreurs de logique
+
+Correction de plusieurs problèmes :
+
+* faute de frappe sur `threshold`
+* mauvaise utilisation de `append()`
+* erreurs d'indentation
+* variables incohérentes
+* logique de détection incomplète
+
+
+
+# État actuel du projet
+
+## Fonctionnel
+
+### Détection Web
+
+* SQL Injection
+* Local File Inclusion
+* Cross-Site Scripting
+* surveillance en temps réel
+
+### Détection Authentification
+
+* extraction des échecs de connexion WordPress
+* suivi des utilisateurs ciblés
+* détection de brute force basée sur le temps
+
+### Journalisation
+
+* alertes console
+* alertes fichier
+
+```text
+alerts.log
+```
+
+* événements JSON
+
+```text
+logs.json
+```
+
+
+
+# Architecture actuelle
+
+```text
+                +------------------+
+                |  Docker Logs     |
+                +---------+--------+
+                          |
+                          v
+                   web_loop()
+                          |
+                    SQLi/LFI/XSS
+                          |
+                          v
+                      Alertes
+
+                +------------------+
+                |  WP Simple History|
+                +------+--+
+                          |
+                          v
+                   auth_loop()
+                          |
+                    Bruteforce Engine
+                          |
+                          v
+                      Alertes
+```
+
+
+
+
