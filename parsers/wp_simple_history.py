@@ -38,6 +38,7 @@ def failed_logins(raw):
                 username = match.group(1) if match else None
 
                 events.append({
+                        "source": "wordpress",
                         "type": "failed_login",
                         "username": username,
                         "date" : parsed["date"],
