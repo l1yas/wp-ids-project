@@ -60,6 +60,3 @@ def debug():
         print("\n=== EVENTS ===")
         print(events)
 
-
-if __name__ == "__main__":
-        debug()
