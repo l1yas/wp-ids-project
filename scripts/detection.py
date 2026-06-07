@@ -5,6 +5,7 @@ from collections import defaultdict
 import subprocess
 import json
 from bruteforce import failed_logins, detect_bruteforce
+from parsers.wp_simple_history import get_failed_logins_events
 import threading
 
 # files
@@ -67,14 +68,10 @@ def docker_logs():
     for line in process.stdout:
         yield line
 
-def is_failed_login(line):
-    return "Failed to login" in line
-            
-
 
 def json_logs(data):
     with open(json_output, "a") as f:
-    	f.write(json.dumps(data) + "\n")
+        f.write(json.dumps(data) + "\n")
 
 # -- Extractions
 
@@ -88,11 +85,7 @@ def extract_ip(line):
     return line.split(" ")[0]
 
 def extract_timestamp(line):
-	return line.split("[")[1].split("]")[0]
-
-def extract_username(line):
-	match = re.search(r'username "([^"]+)"', line)
-	return match.group(1) if match else None
+        return line.split("[")[1].split("]")[0]
 
 # -- Threads 
 
@@ -121,39 +114,44 @@ def auth_loop():
 
     while True:
 
-        process = subprocess.Popen(
-            [
-                "docker", "exec", "wordpress-wordpress-1",
-                "wp", "simple-history", "list", "--allow-root"
-            ],
-            stdout=subprocess.PIPE,
-            text=True
-        )
+        events = get_failed_logins_events()
 
-        for line in process.stdout:
+        for event in events:
 
-            if "Failed to login" not in line:
+            key = event["raw"]
+
+            if key in seen:
                 continue
 
-            username = extract_username(line)
+            seen.add(key)
 
-            if not username:
-                continue
-
-            if line in seen:
-                continue
-
-            seen.add(line)
+            username = event["username"]
 
             failed_logins("unknown", username)
 
             brute = detect_bruteforce("unknown", username)
 
             if brute:
-                print(f"{bold}{rouge}[ALERT]{reset} BRUTEFORCE user={username}")
+
+                alert_text = (
+                    f"{bold}{rouge}[ALERT]{reset} "
+                    f"BRUTEFORCE user={username}"
+                )
+
+                print(alert_text)
+
+                log_alert(alert_text)
+
+                json_logs({
+                    "source": "wordpress",
+                    "attack": "BRUTEFORCE",
+                    "username": username,
+                    "timestamp": event.get("timestamp", event.get("date")),
+                    "log": event["raw"]
+                })
 
         time.sleep(5)
-
+        
 if __name__ == "__main__":
 
     print("Script IDS démarré")
