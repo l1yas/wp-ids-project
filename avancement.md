@@ -1,137 +1,161 @@
-# Bilan d’avancement — 07/06/2026
+# Bilan technique — 08/06/2026
 
-## IDS WordPress : refactor parsing et intégration detection engine
+## Évolution du dashboard IDS (print → Rich live dashboard)
 
+# 1. Première étape — Dashboard basique (print engine)
 
+## Objectif initial
 
-## 1. Stabilisation du parser WordPress
+Créer une visualisation minimale des événements IDS directement dans le terminal.
 
-### Objectif
+## Approche
 
-Externaliser complètement le parsing des logs WordPress depuis `detection.py` vers un module dédié basé sur WP-CLI.
+- utilisation de `print()`
+- affichage brut des alertes
+- pipeline simple basé sur `detection.py`
 
-### Travail réalisé (`parsers/wp_simple_history.py`)
+## Résultat
 
-* Récupération des logs via :
+- affichage fonctionnel des attaques :
+    - SQLi
+    - LFI
+    - XSS
+    - bruteforce (partiel)
+- validation du moteur IDS
 
-  * `docker exec wordpress-wordpress-1 wp simple-history list`
-* Parsing des lignes tabulées avec `split("\t")`
-* Filtrage des événements de type `Failed to login`
-* Extraction du username via regex :
+## Limites
 
-  ```python
-  r'username "([^"]+)"'
-  ```
+- aucune structure visuelle
+- impossible d’analyser les tendances
+- pas de lecture SOC-like
+- aucune séparation des données
 
-### Résultat
+# 2. Deuxième étape — introduction de Rich (prototype dashboard)
 
-Les logs WordPress sont désormais normalisés en événements structurés :
+## Objectif
+
+Passer d’un flux brut à une **visualisation structurée**.
+
+## Ajouts
+
+- `rich.table`
+- premières métriques :
+    - attaques par type
+    - IP les plus actives
+    - utilisateurs
+
+## Résultat
+
+- premier tableau exploitable
+- amélioration de la lisibilité
+- début d’un SOC-like view
+
+## Limites identifiées
+
+- données mélangées
+- pas de layout global
+- pas de recent events clair
+- logique encore monolithique
+
+# 3. Troisième étape — Rich layout avancé (version actuelle)
+
+## Objectif
+
+Transformer le dashboard en **interface SOC temps réel**.
+
+## Architecture introduite
+
+### Layout principal :
+
+- header (titre IDS)
+- body (3 colonnes)
+    - Attacks
+    - Top IPs
+    - Top Users
+- footer (recent alerts)
+
+## Pipeline de données
+
+```
+logs.json → load_stats() → Counter + deque → Rich Layout
+```
+
+## Fonctionnalités ajoutées
+
+### 1. Agrégation statistique
+
+- Counter sur :
+    - attack types
+    - IP
+    - users
+
+### 2. Timeline légère
+
+- `deque(maxlen=10)` pour recent events
+
+### 3. Live dashboard
+
+- refresh via `Live()`
+- affichage temps réel
+
+## Problèmes rencontrés et corrigés
+
+### 1. Erreur de type dans recent events
+
+- cause : `str` au lieu de `dict`
+- correction : validation `isinstance(event, dict)`
+
+### 2. Bug slicing critique
+
+- erreur :
 
 ```python
-{
-    "type": "failed_login",
-    "username": "admin",
-    "date": "2026-06-04 01:28:04",
-    "level": "warning",
-    "raw": "..."
-}
+[-10]
 ```
 
-
-
-## 2. Intégration propre dans detection.py
-
-### Objectif
-
-Supprimer toute logique WP-CLI et parsing WordPress dans le moteur IDS principal.
-
-### Nettoyage effectué
-
-* Suppression du parsing manuel des logs WordPress
-* Suppression de :
-
-  * `extract_username`
-  * `is_failed_login`
-* Remplacement du flux auth par consommation directe du parser :
-
-  * `get_failed_logins_events()`
-
-
-
-## 3. Nouveau pipeline authentication
-
-### Avant
-
-```
-detection.py → WP-CLI → regex → bruteforce detection
-```
-
-### Après
-
-```
-detection.py → parser WordPress → events structurés → bruteforce detection
-```
-
-
-
-## 4. Correction de schéma de données
-
-### Problème rencontré
-
-Erreur runtime :
-
-```
-KeyError: 'timestamp'
-```
-
-### Cause
-
-Incohérence entre les champs :
-
-* `date` dans le parser initial
-* `timestamp` dans le moteur IDS
-
-### Correction appliquée
-
-Fallback robuste :
+- correction :
 
 ```python
-event.get("timestamp", event.get("date"))
+[-10:]
 ```
 
+### 3. Crash `.get()` sur string
 
+- cause indirecte du slicing
+- résolu par correction structurelle
 
-## 5. Stabilisation du moteur threading
+### 4. Incohérence Live refresh
 
-### Objectif
+- correction de l’ordre :
+    - sleep avant update
 
-Éviter les crashs et les boucles de polling inefficaces.
+# 4. État actuel du dashboard
 
-### Correctifs appliqués
+## Fonctionnel
 
-* Threads définis en `daemon=True`
-* Ajout de `time.sleep(5)` dans la boucle auth
-* Introduction d’un `seen set()` pour éviter les doublons
-* Suppression du polling WP-CLI dans `detection.py`
+- visualisation temps réel
+- séparation claire des données
+- statistiques exploitables
+- recent events stable
+- pipeline IDS complet connecté
 
+## Architecture validée
 
+```
+detection.py
+     ↓
+logs.json
+     ↓
+dashboard.py (Rich Live)
+     ↓
+SOC view terminal
+```
 
-## 6. État global du système
+# 5. Prochaine étape logique (pas obligatoire mais naturelle)
 
-| Module                       | État                      |
-| ---------------------------- | ------------------------- |
-| Parser WordPress             | Stable                    |
-| Détection web (SQLi/LFI/XSS) | Stable                    |
-| Pipeline authentication      | Stable                    |
-| Threading                    | Fonctionnel mais sensible |
-| Schéma d’événements          | Partiellement unifié      |
+Ton système est maintenant prêt pour :
 
-
-
-## Conclusion
-
-Cette étape marque la transition d’un script IDS monolithique vers une architecture modulaire basée sur des événements.
-
-Le parsing WordPress est désormais isolé et réutilisable, et `detection.py` se concentre uniquement sur la logique de détection et de corrélation.
-
-La prochaine étape logique est l’unification complète du schéma d’événements et l’introduction d’une corrélation multi-sources (IP, utilisateur, temporalité).
+- severity scoring (LOW / MEDIUM / HIGH)
+- alert correlation (multi-event attack)
+- export API (Flask)
+- dashboard web HTML
