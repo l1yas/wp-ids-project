@@ -1,40 +1,56 @@
 import json
+import time
 from collections import Counter
+
+from rich.console import Console
+from rich.table import Table
+from rich.live import Live
 
 log_file="logs.json"
 
-attacks = Counter()
-ips = Counter()
-users = Counter()
+console = Console()
 
-with open(log_file, "r") as f:
-    for line in f:
-        try:
-            event = json.loads(line)
-            if "attack" in event:
-                attacks[event["attack"]] += 1
-            if "ip" in event:
-                ips[event["ip"]] += 1
+def load_stats():
+    attacks = Counter()
+    ips = Counter()
+    users = Counter()
 
-            if "username" in event:
-                users[event["username"]] += 1
-        except Exception:
-            continue
+    try : 
+        with open(log_file, "r") as f:
+            for line in f :
+                try:
+                    event = json.loads(line)
+                    if "attack" in event:
+                        attacks[event["attack"]] += 1
+                    if "ip" in event:
+                        ips[event["ip"]] += 1
+                    if "username" in event:
+                        users[event["username"]] += 1
+                except Exception:
+                    pass
+    except FileNotFoundError:
+        pass
+    return attacks, ips, users
 
-print("=" * 50)
-print("IDS DASHBOARD")
-print("=" * 50)
+def build_dash():
+    attacks, ips, users = load_stats()   
+    table = Table(title="IDS Dashboard")
 
-print("\nAttack types:")
-for attack, count in attacks.most_common():
-    print(f"  {attack:<15} {count}")
+    table.add_column("Category")
+    table.add_column("Value")
+    table.add_column("Count")
 
-print("\nTop IPs:")
-for ip, count in ips.most_common(5):
-    print(f"  {ip:<20} {count}")
+    for attack, count in attacks.most_common():
+        table.add_row("Attack", attack, str(count))
+    
+    for ip, count in ips.most_common(5):
+        table.add_row("IP", ip, str(count))
 
-print("\nTop usernames:")
-for user, count in users.most_common(5):
-    print(f"  {user:<20} {count}")
+    for user, count in users.most_common(5):
+        table.add_row("User", user, str(count))
+    return table
 
-print("\nTotal events:", sum(attacks.values()))
+with Live(build_dash(), refresh_per_second=1) as live:
+    while True:
+        live.update(build_dash())
+        time.sleep(2)
