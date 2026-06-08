@@ -1,14 +1,18 @@
 import json
 import time
-from collections import Counter
+from collections import Counter, deque
 
 from rich.console import Console
 from rich.table import Table
+from rich.layout import Layout
+from rich.panel import Panel
 from rich.live import Live
 
 log_file="logs.json"
 
 console = Console()
+
+recent_events = deque(maxlen=10)
 
 def load_stats():
     attacks = Counter()
@@ -20,37 +24,84 @@ def load_stats():
             for line in f :
                 try:
                     event = json.loads(line)
-                    if "attack" in event:
-                        attacks[event["attack"]] += 1
-                    if "ip" in event:
-                        ips[event["ip"]] += 1
-                    if "username" in event:
-                        users[event["username"]] += 1
+
+                    attack = event.get("attack")
+                    ip = event.get("ip")
+                    user = event.get("username")
+
+                    if attack:
+                        attacks[attack] += 1
+                    if ip:
+                        ips[ip] += 1
+                    if user:
+                        users[user] += 1
+
+                    if isinstance(event, dict):
+                        recent_events.append(event)
+
                 except Exception:
-                    pass
+                    continue
     except FileNotFoundError:
         pass
     return attacks, ips, users
 
-def build_dash():
-    attacks, ips, users = load_stats()   
-    table = Table(title="IDS Dashboard")
-
-    table.add_column("Category")
-    table.add_column("Value")
+def make_table(title, counter, limit=5):
+    table = Table(title=title)
+    table.add_column("Key")
     table.add_column("Count")
 
-    for attack, count in attacks.most_common():
-        table.add_row("Attack", attack, str(count))
-    
-    for ip, count in ips.most_common(5):
-        table.add_row("IP", ip, str(count))
-
-    for user, count in users.most_common(5):
-        table.add_row("User", user, str(count))
+    for k, v in counter.most_common(limit):
+        table.add_row(str(k), str(v))
     return table
+    
+
+def make_recent():
+    table = Table(title="Recent Alerts")
+    table.add_column("Type")
+    table.add_column("IP/User")
+
+    for e in list(recent_events)[-10:]:
+        table.add_row(
+            str(e.get("attack", "")),
+            str(e.get("ip", e.get("username", "")))
+        )
+    return table
+
+
+def build_dash():
+    attacks, ips, users = load_stats()   
+    layout = Layout()
+
+    layout.split_column(
+        Layout(name="header", size=3),
+        Layout(name="body"),
+        Layout(name="footer", size=10),
+    )
+
+    layout["header"].update(
+        Panel(
+            f"IDS DASHBOARD",
+            style="bold white on blue"
+        )
+    )
+
+    body = Layout()
+
+    body.split_row(
+        Layout(make_table("Attacks", attacks)),
+        Layout(make_table("Top IPs", ips)),
+        Layout(make_table("Top Users", users)),
+    )
+
+    layout["body"].update(body)
+
+    layout["footer"].update(make_recent())
+
+    return layout
+
 
 with Live(build_dash(), refresh_per_second=1) as live:
     while True:
-        live.update(build_dash())
         time.sleep(2)
+        live.update(build_dash())
+
