@@ -3,6 +3,7 @@ let currentSort = { key: "timestamp", dir: "desc" };
 
 let attackChart = null;
 let dayChart = null;
+let ipChart = null;
 
 function parseTimestamp(ts) {
     if (!ts) return null;
@@ -107,7 +108,7 @@ function renderAttackChart(data) {
     if (attackChart) attackChart.destroy();
 
     attackChart = new Chart(document.getElementById("attackChart"), {
-        type: "bar",
+        type: "pie",
         data: {
             labels,
             datasets: [{
@@ -126,8 +127,13 @@ function buildDayStats(data) {
         const t = parseTimestamp(e.timestamp || e.date);
         if (!t) return;
 
-        const day = t.toISOString().slice(0, 10);
-        c[day] = (c[day] || 0) + 1;
+        const hour =
+            t.getUTCFullYear() + "-" +
+            String(t.getUTCMonth() + 1).padStart(2, "0") + "-" +
+            String(t.getUTCDate()).padStart(2, "0") + " " +
+            String(t.getUTCHours()).padStart(2, "0") + ":00";
+
+        c[hour] = (c[hour] || 0) + 1;
     });
 
     return c;
@@ -145,12 +151,44 @@ function renderDayChart(data) {
     if (dayChart) dayChart.destroy();
 
     dayChart = new Chart(document.getElementById("timeChart"), {
-        type: "bar",
+        type: "line",
         data: {
             labels,
             datasets: [{
-                label: "Attacks per day",
-                data: values
+                label: "Attacks per hour",
+                data: values,
+                backgroundColor: "#ff9f00", // orange
+                borderColor: "#ff9f00",
+                tension: 0.35
+            }]
+        }
+    });
+}
+function buildIpStats(data) {
+    const c = {};
+
+    data.forEach(e => {
+        const k = (e.ip || "unknown").toUpperCase();
+        c[k] = (c[k] || 0) + 1;
+    });
+
+    return c;
+}
+function renderIpChart(data) {
+    const stats = buildIpStats(data);
+
+    const labels = Object.keys(stats);
+    const values = Object.values(stats);
+
+    if (ipChart) ipChart.destroy();
+
+    ipChart = new Chart(document.getElementById("ipChart"), {
+        type: "pie",
+        data: {
+            labels,
+            datasets: [{
+                label: "Top IPs",
+                data: values,
             }]
         }
     });
@@ -191,6 +229,7 @@ async function fetch_logs() {
         renderTable(filtered);
         renderAttackChart(filtered);
         renderDayChart(filtered);
+        renderIpChart(filtered);
 
     } catch (err) {
         console.error("Fetch error:", err);
