@@ -2,22 +2,15 @@ let logsData = [];
 let currentSort = { key: "timestamp", dir: "desc" };
 
 let attackChart = null;
-let timeChart = null;
-
-/* =========================
-   TIMESTAMP NORMALIZATION
-========================= */
+let dayChart = null;
 
 function parseTimestamp(ts) {
     if (!ts) return null;
 
-    let d = new Date(ts);
+    const d = new Date(ts);
     if (!isNaN(d.getTime())) return d;
 
-    // Apache format: 28/Apr/2026:12:13:30 +0000
-    const m = ts.match(
-        /(\d{2})\/(\w{3})\/(\d{4}):(\d{2}):(\d{2}):(\d{2})/
-    );
+    const m = ts.match(/(\d{2})\/(\w{3})\/(\d{4}):(\d{2}):(\d{2}):(\d{2})/);
 
     if (m) {
         const [, day, mon, year, h, min, s] = m;
@@ -45,10 +38,6 @@ function formatTimestamp(ts) {
     return d.toISOString().replace("T", " ").split(".")[0];
 }
 
-/* =========================
-   SORTING
-========================= */
-
 function sortLogs(data, key, dir = "desc") {
     return [...data].sort((a, b) => {
         let x = a[key];
@@ -65,10 +54,6 @@ function sortLogs(data, key, dir = "desc") {
     });
 }
 
-/* =========================
-   TABLE RENDER
-========================= */
-
 function renderTable(data) {
     let html = "";
 
@@ -80,93 +65,115 @@ function renderTable(data) {
             <td>${e.attack || e.type || ""}</td>
             <td>${e.ip || ""}</td>
             <td>${e.username || ""}</td>
+            <td>${e.severity || ""}</td>
         </tr>`;
     });
 
     document.getElementById("logs").innerHTML = html;
 }
 
-/* =========================
-   STATS BUILD
-========================= */
-
 function buildAttackStats(data) {
     const c = {};
+
     data.forEach(e => {
-        const k = e.attack || e.type || "unknown";
+        const k = (e.subtype || "unknown").toUpperCase();
         c[k] = (c[k] || 0) + 1;
     });
-    return c;
-}
-
-function buildTimeStats(data) {
-    const c = {};
-
-    data.forEach(e => {
-        const t = new Date(e.timestamp || e.date);
-        if (isNaN(t)) return;
-
-        const key = t.toISOString().slice(0, 16); // minute
-        c[key] = (c[key] || 0) + 1;
-    });
 
     return c;
 }
 
-/* =========================
-   CHARTS
-========================= */
+function getColor(type) {
+    const map = {
+        "SQLI": "#ff3b30",
+        "LFI": "#ff9500",
+        "XSS": "#af52de",
+        "COMMANDINJECTION": "#ff2d55",
+        "FILEDISCLOSURE": "#5ac8fa",
+        "WEBSHELL": "#ffcc00",
+        "UNKNOWN": "#8e8e93"
+    };
+
+    return map[type] || "#8e8e93";
+}
 
 function renderAttackChart(data) {
     const stats = buildAttackStats(data);
 
     const labels = Object.keys(stats);
     const values = Object.values(stats);
+    const colors = labels.map(getColor);
 
     if (attackChart) attackChart.destroy();
 
-    attackChart = new Chart(
-        document.getElementById("attackChart"),
-        {
-            type: "bar",
-            data: {
-                labels,
-                datasets: [{
-                    label: "Attacks",
-                    data: values
-                }]
-            }
+    attackChart = new Chart(document.getElementById("attackChart"), {
+        type: "bar",
+        data: {
+            labels,
+            datasets: [{
+                label: "Attack types",
+                data: values,
+                backgroundColor: colors
+            }]
         }
-    );
+    });
 }
 
-function renderTimeChart(data) {
-    const stats = buildTimeStats(data);
+function buildDayStats(data) {
+    const c = {};
 
-    const labels = Object.keys(stats).slice(-20);
-    const values = Object.values(stats).slice(-20);
+    data.forEach(e => {
+        const t = parseTimestamp(e.timestamp || e.date);
+        if (!t) return;
 
-    if (timeChart) timeChart.destroy();
+        const day = t.toISOString().slice(0, 10);
+        c[day] = (c[day] || 0) + 1;
+    });
 
-    timeChart = new Chart(
-        document.getElementById("timeChart"),
-        {
-            type: "line",
-            data: {
-                labels,
-                datasets: [{
-                    label: "Events/min",
-                    data: values,
-                    tension: 0.3
-                }]
-            }
-        }
-    );
+    return c;
 }
 
-/* =========================
-   FETCH LOOP
-========================= */
+function renderDayChart(data) {
+    const stats = buildDayStats(data);
+
+    const sorted = Object.entries(stats)
+        .sort((a, b) => new Date(a[0]) - new Date(b[0]));
+
+    const labels = sorted.map(x => x[0]);
+    const values = sorted.map(x => x[1]);
+
+    if (dayChart) dayChart.destroy();
+
+    dayChart = new Chart(document.getElementById("timeChart"), {
+        type: "bar",
+        data: {
+            labels,
+            datasets: [{
+                label: "Attacks per day",
+                data: values
+            }]
+        }
+    });
+}
+
+function applyFilters(data) {
+    const type = document.getElementById("typeFilter").value;
+    const severity = document.getElementById("severityFilter").value;
+    const search = document.getElementById("searchInput").value.toLowerCase();
+
+    return data.filter(e => {
+        const matchType = type === "all" || e.type === type;
+        const matchSeverity = severity === "all" || String(e.severity) === severity;
+
+        const matchSearch =
+            !search ||
+            (e.ip || "").toLowerCase().includes(search) ||
+            (e.username || "").toLowerCase().includes(search) ||
+            (e.subtype || "").toLowerCase().includes(search);
+
+        return matchType && matchSeverity && matchSearch;
+    });
+}
 
 async function fetch_logs() {
     try {
@@ -178,24 +185,17 @@ async function fetch_logs() {
             _ts: toTimestamp(e.timestamp || e.date)
         }));
 
-        const sorted = sortLogs(
-            logsData,
-            currentSort.key,
-            currentSort.dir
-        );
+        const sorted = sortLogs(logsData, currentSort.key, currentSort.dir);
+        const filtered = applyFilters(sorted);
 
-        renderTable(sorted);
-        renderAttackChart(logsData);
-        renderTimeChart(logsData);
+        renderTable(filtered);
+        renderAttackChart(filtered);
+        renderDayChart(filtered);
 
     } catch (err) {
         console.error("Fetch error:", err);
     }
 }
-
-/* =========================
-   SORT CONTROL
-========================= */
 
 function setSort(key) {
     if (currentSort.key === key) {
@@ -206,12 +206,8 @@ function setSort(key) {
     }
 
     const sorted = sortLogs(logsData, currentSort.key, currentSort.dir);
-    renderTable(sorted);
+    renderTable(applyFilters(sorted));
 }
-
-/* =========================
-   INIT
-========================= */
 
 fetch_logs();
 setInterval(fetch_logs, 2000);

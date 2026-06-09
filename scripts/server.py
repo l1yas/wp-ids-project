@@ -12,12 +12,12 @@ def load_logs():
             for line in f :
                 try :
                     events.append(json.loads(line))
-                except:
+                except json.JSONDecodeError:
                     continue
     except FileNotFoundError:
         pass
-    
-    return events[-100:]
+    max_events = 10000
+    return events[-max_events:]
 
 
 @app.route("/events")

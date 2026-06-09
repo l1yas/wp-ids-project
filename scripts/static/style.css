@@ -1,30 +1,85 @@
 body {
-    background-color: #0f0f0f;
-    color: #00ff88;
+    background: #0f1117;
+    color: white;
     font-family: monospace;
-    margin: 20px;
+}
+
+.container {
+    width: 95%;
+    margin: auto;
 }
 
 h1 {
-    color: #00ffaa;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    font-size: 24px;
+}
+
+.charts {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+canvas {
+    width: 100% !important;
+    max-height: 300px;
+    background: #121826;
+    border: 1px solid #222;
+    border-radius: 6px;
+    padding: 10px;
+}
+
+.filters {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.filters select,
+.filters input {
+    background: #121826;
+    color: white;
+    border: 1px solid #2a3142;
+    padding: 8px 10px;
+    border-radius: 4px;
+    outline: none;
+}
+
+.filters select:hover,
+.filters input:hover {
+    border-color: #3b455c;
 }
 
 table {
     width: 100%;
     border-collapse: collapse;
+    margin-top: 10px;
+    background: #121826;
+    border-radius: 6px;
+    overflow: hidden;
 }
 
 th, td {
-    border: 1px solid #333;
-    padding: 8px;
+    padding: 10px;
+    border-bottom: 1px solid #2a3142;
     text-align: left;
 }
 
 th {
-    background-color: #111;
-    color: #00ffaa;
+    cursor: pointer;
+    background: #1a1f2b;
+    user-select: none;
+}
+
+th:hover {
+    background: #2a3142;
 }
 
 tr:hover {
-    background-color: #1a1a1a;
+    background: #151b27;
 }

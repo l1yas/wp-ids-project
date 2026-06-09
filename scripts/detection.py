@@ -24,26 +24,81 @@ bold="\033[1m"
 # patterns
 patterns = {
     "SQLi": [
-        r"(?i)(\%27)|(\')|(\-\-)|(\%23)|(#)",
-        r"(?i)(union.*select)",
-        r"(?i)(or\s+1=1)",
-        r"(?i)(sleep\()"
+        r"(?i)(\%27|')\s*(or|and)\s*\d+=\d+",
+        r"(?i)(union(\s+all)?\s+select)",
+        r"(?i)(or\s+1\s*=\s*1)",
+        r"(?i)(--|#|/\*)",
+        r"(?i)sleep\s*\(",
+        r"(?i)benchmark\s*\(",
+        r"(?i)information_schema",
+        r"(?i)load_file\s*\(",
+        r"(?i)into\s+outfile",
+        r"(?i)extractvalue\s*\(",
+        r"(?i)updatexml\s*\("
     ],
+
     "LFI": [
-        r"(\.\./\.\./)",
-        r"/etc/passwd",
-        r"wp-config\.php"
+        r"(\.\./|\.\.\\)+",
+        r"(?i)/etc/passwd",
+        r"(?i)/proc/self/environ",
+        r"(?i)boot\.ini",
+        r"(?i)wp-config\.php",
+        r"(?i)php://filter",
+        r"(?i)php://input",
+        r"(?i)file://",
+        r"(?i)expect://",
+        r"(%2e%2e%2f|%2e%2e%5c)"
     ],
+
     "XSS": [
-        r"(?i)<script>",
-        r"(?i)javascript:",
-        r"(?i)onerror="
+    r"(?i)<\s*script",
+    r"(?i)javascript\s*:",
+    r"(?i)on\w+\s*=",
+    r"(?i)<img[^>]+onerror",
+    r"(?i)<svg[^>]+onload",
+    r"(?i)document\.cookie",
+    r"(?i)alert\s*\(",
+    r"(?i)eval\s*\(",
+    r"(?i)src\s*=\s*javascript:"
     ],
+
+    "CommandInjection": [
+    r"(?i)(;|\||&&)\s*(cat|ls|id|whoami|wget|curl)",
+    r"(?i)`.*`",
+    r"(?i)\$\(",
+    r"(?i)/bin/(sh|bash)",
+    r"(?i)nc\s+-e"
+    ],
+
+    "FileDisclosure": [
+    r"(?i)/etc/shadow",
+    r"(?i)/etc/hosts",
+    r"(?i)\.env",
+    r"(?i)id_rsa",
+    r"(?i)config\.php",
+    ],
+
+    "WebShell": [
+    r"(?i)cmd=",
+    r"(?i)exec\(",
+    r"(?i)system\(",
+    r"(?i)passthru\(",
+    r"(?i)shell_exec\("
+    ]
 }
 
 #functions
 
-
+severity_map = {
+    "SQLi": 5,
+    "LFI": 4,
+    "XSS": 3,
+    "CommandInjection": 5,
+    "FileDisclosure": 4,
+    "WebShell": 5,
+    "SSRF": 4,
+    "BRUTEFORCE": 2
+}
 
 def detection(line):
     for attack_type, PATTERNS in patterns.items():
@@ -97,6 +152,7 @@ def web_loop():
         attack = detection(line)
 
         if attack:
+            severity = severity_map.get(attack, 1)
             alert_text = f"{bold}{jaune}[Alert]{reset} {attack} from {ip}"
             print(alert_text)
 
@@ -107,6 +163,7 @@ def web_loop():
                 "source": "nginx",
                 "type": "web",
                 "subtype": attack,
+                "severity": severity,
                 "ip": ip,
                 "username": None,
                 "url": url, 
