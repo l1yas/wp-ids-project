@@ -1,0 +1,30 @@
+body {
+    background-color: #0f0f0f;
+    color: #00ff88;
+    font-family: monospace;
+    margin: 20px;
+}
+
+h1 {
+    color: #00ffaa;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    border: 1px solid #333;
+    padding: 8px;
+    text-align: left;
+}
+
+th {
+    background-color: #111;
+    color: #00ffaa;
+}
+
+tr:hover {
+    background-color: #1a1a1a;
+}

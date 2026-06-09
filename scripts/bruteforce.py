@@ -5,8 +5,8 @@ failed_by_ip =defaultdict(deque)
 failed_by_user = defaultdict(deque)
 
 window = 60
-treshold_ip= 7
-treshold_user=7
+threshold_ip= 7
+threshold_user=7
 
 def failed_logins(ip, username):
     now = time.time()
@@ -22,15 +22,15 @@ def detect_bruteforce(ip, username):
     ip_hits = len(failed_by_ip[ip])
     user_hits = len(failed_by_user[username])
 
-    if ip_hits >= treshold_ip:
+    if ip_hits >= threshold_ip:
         return {
             "type": "bruteforce_ip",
             "ip": ip,
             "score": ip_hits
         }
-    if user_hits >= treshold_user:
+    if user_hits >= threshold_user:
         return {
-            "type": "password_spraying",
+            "type": "user_bruteforce",
             "username": username,
             "score": user_hits
         }

@@ -71,7 +71,7 @@ def docker_logs():
 
 def json_logs(data):
     with open(json_output, "a") as f:
-        f.write(json.dumps(data) + "\n")
+    	f.write(json.dumps(data) + "\n")
 
 # -- Extractions
 
@@ -85,7 +85,7 @@ def extract_ip(line):
     return line.split(" ")[0]
 
 def extract_timestamp(line):
-        return line.split("[")[1].split("]")[0]
+	return line.split("[")[1].split("]")[0]
 
 # -- Threads 
 
@@ -103,9 +103,13 @@ def web_loop():
             log_alert(alert_text)
 
             json_logs({
+                "timestamp": extract_timestamp(line),
+                "source": "nginx",
+                "type": "web",
+                "subtype": attack,
                 "ip": ip,
-                "attack": attack,
-                "url": url,
+                "username": None,
+                "url": url, 
                 "log": line.strip()
             })
 
@@ -142,13 +146,16 @@ def auth_loop():
 
                 log_alert(alert_text)
 
-                json_logs({
-                    "source": "wordpress",
-                    "attack": "BRUTEFORCE",
-                    "username": username,
-                    "timestamp": event.get("timestamp", event.get("date")),
-                    "log": event["raw"]
-                })
+            json_logs({
+                "timestamp": event.get("date"),
+                "source": "wordpress",
+                "type": "auth",
+                "subtype": "bruteforce",
+                "ip": "unknown",
+                "username": username,
+                "url": None, 
+                "log": event["raw"]
+            })
 
         time.sleep(5)
         

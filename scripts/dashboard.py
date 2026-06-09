@@ -19,13 +19,13 @@ def load_stats():
     ips = Counter()
     users = Counter()
 
-    try : 
+    try :
         with open(log_file, "r") as f:
             for line in f :
                 try:
                     event = json.loads(line)
 
-                    attack = event.get("attack")
+                    attack = event.get("attack") or event.get("subtype")
                     ip = event.get("ip")
                     user = event.get("username")
 
@@ -53,7 +53,7 @@ def make_table(title, counter, limit=5):
     for k, v in counter.most_common(limit):
         table.add_row(str(k), str(v))
     return table
-    
+
 
 def make_recent():
     table = Table(title="Recent Alerts")
@@ -62,7 +62,7 @@ def make_recent():
 
     for e in list(recent_events)[-10:]:
         table.add_row(
-            str(e.get("attack", "")),
+            str(e.get("subtype", e.get("attack", ""))),
             str(e.get("ip", e.get("username", "")))
         )
     return table
@@ -81,7 +81,7 @@ def build_dash():
     layout["header"].update(
         Panel(
             f"IDS DASHBOARD",
-            style="bold white on blue"
+            style="bold white on green"
         )
     )
 
