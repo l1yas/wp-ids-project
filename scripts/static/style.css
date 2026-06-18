@@ -34,10 +34,17 @@ canvas {
 
 .filters {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     align-items: center;
-    margin-bottom: 15px;
-    flex-wrap: wrap;
+}
+
+#searchInput {
+    flex: 3;
+}
+
+.filters select {
+    flex: 1;
+    min-width: 140px;
 }
 
 .filters select,
@@ -92,15 +99,17 @@ tr:hover {
     margin-top: 20px;
 }
 
+/* blocs individuels de graph */
 .charts canvas {
     background: #151a23;
-    border: 1px rgb(4, 70, 192)2a3142;
+    border: 1px solid #2a3142;
     border-radius: 10px;
     padding: 10px;
     width: 100% !important;
     max-height: 320px;
 }
 
+/* optionnel : séparation visuelle */
 .chart-box {
     background: #121621;
     border: 1px solid #222838;
@@ -108,6 +117,7 @@ tr:hover {
     padding: 10px;
 }
 
+/* améliore lisibilité globale */
 h1 {
     color: #e6edf3;
     letter-spacing: 1px;
@@ -116,4 +126,36 @@ h1 {
 /* hover tableau plus lisible */
 tr:hover {
     background: #1c2333;
+}
+
+/* petit accent couleur global dashboard */
+:root {
+    --sql: #ff3b30;
+    --lfi: #ff9500;
+    --xss: #af52de;
+    --cmd: #ff2d55;
+    --file: #5ac8fa;
+    --shell: #ffcc00;
+    --unknown: #8e8e93;
+}
+
+#searchInput {
+    width: 350px;
+    padding: 10px 14px;
+    font-size: 16px;
+
+    border: 2px solid #444;
+    border-radius: 8px;
+
+    background-color: #111;
+    color: #fff;
+
+    outline: none;
+
+    transition: 0.2s ease;
+}
+
+#searchInput:focus {
+    border-color: #00aaff;
+    box-shadow: 0 0 8px rgba(0, 170, 255, 0.5);
 }
