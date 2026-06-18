@@ -16,9 +16,22 @@
         <h1>IDS DASHBOARD</h1>
 
         <div class="charts">
-            <canvas id="attackChart"></canvas>
-            <canvas id="timeChart"></canvas>
-            <canvas id="ipChart"></canvas>
+
+            <div class="chart-box">
+                <h3>Répartition des attaques</h3>
+                <canvas id="attackChart"></canvas>
+            </div>
+        
+            <div class="chart-box">
+                <h3>Évolution des attaques dans le temps</h3>
+                <canvas id="timeChart"></canvas>
+            </div>
+        
+            <div class="chart-box">
+                <h3>Top IP sources d’attaques</h3>
+                <canvas id="ipChart"></canvas>
+            </div>
+        
         </div>
 
         <div class="filters">
